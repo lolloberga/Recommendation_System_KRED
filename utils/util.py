@@ -191,7 +191,7 @@ def get_mind_data_set(type):
     Returns:
         list: data url and train valid dataset name
     """
-    assert type in ["large", "small", "demo"]
+    assert type in ["large", "small"]
 
     if type == "large":
         return (
