@@ -325,11 +325,14 @@ def build_user_history(config):
                 user_history_dict[user_id + "_dev"][0] = 'N0'
     return user_history_dict
 
-def build_news_features_mind(config):
+def build_news_features_mind(config, limit_kg_size=None):
     entity2id_dict = {}
     fp_entity2id = open(config['data']['entity_index'], 'r', encoding='utf-8')
     entity_num = int(fp_entity2id.readline().split('\n')[0])
-    for line in fp_entity2id.readlines():
+    limited_fp_entity2id = fp_entity2id.readlines()
+    if limit_kg_size is not None:
+        limited_fp_entity2id = limited_fp_entity2id[:limit_kg_size]
+    for line in limited_fp_entity2id:
         entity, entityid = line.strip().split('\t')
         entity2id_dict[entity] = int(entityid) + 1
 
@@ -621,7 +624,7 @@ def load_data_mind(config):
 
     entity_adj, relation_adj = construct_adj_mind(config, limit_kg_size=1000)
 
-    news_feature, max_entity_freq, max_entity_pos, max_entity_type = build_news_features_mind(config)
+    news_feature, max_entity_freq, max_entity_pos, max_entity_type = build_news_features_mind(config, limit_kg_size=1000)
 
     user_history = build_user_history(config)
 
