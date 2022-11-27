@@ -392,13 +392,19 @@ def build_news_features_mind(config):
     news_features["N0"][4] = np.zeros(config['model']['document_embedding_dim'])
     return news_features, 100, 10, 100
 
-def construct_adj_mind(config):#graph is triple
+def construct_adj_mind(config, limit_kg_size=None):#graph is triple
     print('constructing adjacency matrix ...')
     graph_file_fp = open(config['data']['knowledge_graph'], 'r', encoding='utf-8')
     graph = []
-    for line in graph_file_fp:
-        linesplit = line.split('\n')[0].split('\t')
-        graph.append([int(linesplit[0])+1, int(linesplit[2])+1, int(linesplit[1])+1])
+
+    if limit_kg_size is not None:
+        for line in graph_file_fp.readlines()[:limit_kg_size]:
+            linesplit = line.split('\n')[0].split('\t')
+            graph.append([int(linesplit[0])+1, int(linesplit[2])+1, int(linesplit[1])+1])
+    else:
+        for line in graph_file_fp:
+            linesplit = line.split('\n')[0].split('\t')
+            graph.append([int(linesplit[0])+1, int(linesplit[2])+1, int(linesplit[1])+1])
     kg = {}
     for triple in graph:
         head = triple[0]
@@ -413,7 +419,10 @@ def construct_adj_mind(config):#graph is triple
         kg[tail].append((head, relation))
 
     fp_entity2id = open(config['data']['entity_index'], 'r', encoding='utf-8')
-    entity_num = int(fp_entity2id.readline().split('\n')[0])+1
+    entity_num = limit_kg_size
+    if limit_kg_size is None:
+        entity_num = int(fp_entity2id.readline().split('\n')[0])+1
+    entity_num = 1000
     entity_adj = []
     relation_adj = []
     for i in range(entity_num+1):
@@ -610,7 +619,7 @@ def build_item2item_data(config):
 
 def load_data_mind(config):
 
-    entity_adj, relation_adj = construct_adj_mind(config)
+    entity_adj, relation_adj = construct_adj_mind(config, limit_kg_size=1000)
 
     news_feature, max_entity_freq, max_entity_pos, max_entity_type = build_news_features_mind(config)
 
