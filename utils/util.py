@@ -13,7 +13,71 @@ import math
 import zipfile
 #from logger.logger import *
 from tqdm import tqdm
+import pickle
 
+
+# Create file and save data using pickle
+def save_to_pickle(data, file_name):
+    with open(file_name, "wb") as fp:
+        pickle.dump(data, fp)
+
+# Load data from file using pickle
+def load_from_pickle(filename):
+    with open(filename, "rb") as fp:
+        data = pickle.load(fp)
+    return data
+
+# Returns all the entities in the news dataset
+def entities_news(config):
+    entities = set()
+    # Read entities from train news
+    with open(config["data"]["train_news"]) as fp:
+        for line in fp:
+            newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
+            # Add entities in the title
+            for entity in eval(entity_info_title):
+                entities.add(entity["WikidataId"])
+            # Add entities in the abstract
+            for entity in eval(entity_info_abstract):
+                entities.add(entity["WikidataId"])
+    # Read entities from valid news
+    with open(config["data"]["valid_news"]) as fp:
+        for line in fp:
+            newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
+            # Add entities in the title
+            for entity in eval(entity_info_title):
+                entities.add(entity["WikidataId"])
+            # Add entities in the abstract
+            for entity in eval(entity_info_abstract):
+                entities.add(entity["WikidataId"])
+    return entities
+
+# Return a dictionary from entity names to ids
+def entity_to_id(config, entities):
+  entity2id_dict = {}
+  # Get the association entity-id from the file
+  with open(config["data"]["entity_index"]) as fp:
+    entity_num = int(fp.readline().split('\n')[0])
+    for line in fp:
+        entity, entityid = line.strip().split('\t')
+        if entity in entities:
+            # Entity id is increased by one in order to be compatible with all the following operations
+            entity2id_dict[entity] = int(entityid) + 1
+  return entity2id_dict
+
+# Return a dictionary from entity ids to names
+def id_to_entity(config, ids):
+  entity2id_dict = {}
+  # Get the association entity-id from the file
+  with open(config["data"]["entity_index"]) as fp:
+    entity_num = int(fp.readline().split('\n')[0])
+    for line in fp:
+        entity, entityid = line.strip().split('\t')
+        # Since the entity ids are increased by one when reading from the file,
+        # then it is also done here before the comparison
+        if int(entityid) + 1 in ids:
+            entity2id_dict[entity] = int(entityid) + 1
+  return entity2id_dict
 
 def ensure_dir(dirname):
     dirname = Path(dirname)
