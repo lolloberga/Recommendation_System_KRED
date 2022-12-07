@@ -13,7 +13,71 @@ import math
 import zipfile
 #from logger.logger import *
 from tqdm import tqdm
+import pickle
 
+
+# Create file and save data using pickle
+def save_to_pickle(data, file_name):
+    with open(file_name, "wb") as fp:
+        pickle.dump(data, fp)
+
+# Load data from file using pickle
+def load_from_pickle(filename):
+    with open(filename, "rb") as fp:
+        data = pickle.load(fp)
+    return data
+
+# Returns all the entities in the news dataset
+def entities_news(config):
+    entities = set()
+    # Read entities from train news
+    with open(config["data"]["train_news"]) as fp:
+        for line in fp:
+            newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
+            # Add entities in the title
+            for entity in eval(entity_info_title):
+                entities.add(entity["WikidataId"])
+            # Add entities in the abstract
+            for entity in eval(entity_info_abstract):
+                entities.add(entity["WikidataId"])
+    # Read entities from valid news
+    with open(config["data"]["valid_news"]) as fp:
+        for line in fp:
+            newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
+            # Add entities in the title
+            for entity in eval(entity_info_title):
+                entities.add(entity["WikidataId"])
+            # Add entities in the abstract
+            for entity in eval(entity_info_abstract):
+                entities.add(entity["WikidataId"])
+    return entities
+
+# Return a dictionary from entity names to ids
+def entity_to_id(config, entities):
+  entity2id_dict = {}
+  # Get the association entity-id from the file
+  with open(config["data"]["entity_index"]) as fp:
+    entity_num = int(fp.readline().split('\n')[0])
+    for line in fp:
+        entity, entityid = line.strip().split('\t')
+        if entity in entities:
+            # Entity id is increased by one in order to be compatible with all the following operations
+            entity2id_dict[entity] = int(entityid) + 1
+  return entity2id_dict
+
+# Return a dictionary from entity ids to names
+def id_to_entity(config, ids):
+  entity2id_dict = {}
+  # Get the association entity-id from the file
+  with open(config["data"]["entity_index"]) as fp:
+    entity_num = int(fp.readline().split('\n')[0])
+    for line in fp:
+        entity, entityid = line.strip().split('\t')
+        # Since the entity ids are increased by one when reading from the file,
+        # then it is also done here before the comparison
+        if int(entityid) + 1 in ids:
+            entity2id_dict[entity] = int(entityid) + 1
+  return entity2id_dict
 
 def ensure_dir(dirname):
     dirname = Path(dirname)
@@ -325,17 +389,7 @@ def build_user_history(config):
                 user_history_dict[user_id + "_dev"][0] = 'N0'
     return user_history_dict
 
-def build_news_features_mind(config, limit_kg_size=None):
-    entity2id_dict = {}
-    fp_entity2id = open(config['data']['entity_index'], 'r', encoding='utf-8')
-    entity_num = int(fp_entity2id.readline().split('\n')[0])
-    limited_fp_entity2id = fp_entity2id.readlines()
-    if limit_kg_size is not None:
-        limited_fp_entity2id = limited_fp_entity2id[:limit_kg_size]
-    for line in limited_fp_entity2id:
-        entity, entityid = line.strip().split('\t')
-        entity2id_dict[entity] = int(entityid) + 1
-
+def build_news_features_mind(config, entity2embedding_dict, embedding_folder=None):
     news_features = {}
 
     news_feature_dict = {}
@@ -352,9 +406,18 @@ def build_news_features_mind(config, limit_kg_size=None):
     #deal with doc feature
     entity_type_dict = {}
     entity_type_index = 1
-    model = SentenceTransformer('distilbert-base-nli-stsb-mean-tokens')
-    for news in news_feature_dict:
-        sentence_embedding = model.encode(news_feature_dict[news][0])
+    # Load sentence embeddings from files if present
+    if embedding_folder is not None:
+        sentences_embedding = load_from_pickle(embedding_folder + "train_news_embeddings")
+        sentences_embedding.extend(load_from_pickle(embedding_folder + "valid_news_embeddings"))
+    else:
+        model = SentenceTransformer('distilbert-base-nli-stsb-mean-tokens')
+
+    for i, news in enumerate(news_feature_dict):
+        if embedding_folder is not None:
+            sentence_embedding = sentences_embedding[i]
+        else:
+            sentence_embedding = model.encode(news_feature_dict[news][0])
         news_entity_feature_list = []
         title_entity_json = json.loads(news_feature_dict[news][1])
         abstract_entity_json = json.loads(news_feature_dict[news][2])
@@ -374,8 +437,8 @@ def build_news_features_mind(config, limit_kg_size=None):
                 news_entity_feature[item['WikidataId']] = (len(item['OccurrenceOffsets']), 2, entity_type_dict[
                     item['Type']])  # entity_freq, entity_position, entity_type
         for entity in news_entity_feature:
-            if entity in entity2id_dict:
-                news_entity_feature_list.append([entity2id_dict[entity], news_entity_feature[entity][0], news_entity_feature[entity][1], news_entity_feature[entity][2]])
+            if entity in entity2embedding_dict:
+                news_entity_feature_list.append([entity2embedding_dict[entity], news_entity_feature[entity][0], news_entity_feature[entity][1], news_entity_feature[entity][2]])
         news_entity_feature_list.append([0, 0, 0, 0])
         if len(news_entity_feature_list) > config['model']['news_entity_num']:
             news_entity_feature_list = news_entity_feature_list[:config['model']['news_entity_num']]
@@ -395,39 +458,31 @@ def build_news_features_mind(config, limit_kg_size=None):
     news_features["N0"][4] = np.zeros(config['model']['document_embedding_dim'])
     return news_features, 100, 10, 100
 
-def construct_adj_mind(config, limit_kg_size=None):#graph is triple
+def construct_adj_mind(config, entity2id_dict, entity2embedding_dict):#graph is triple
     print('constructing adjacency matrix ...')
-    graph_file_fp = open(config['data']['knowledge_graph'], 'r', encoding='utf-8')
-    graph = []
+    entities_ids = set(entity2id_dict.values())
+    with open(config['data']['knowledge_graph'], 'r', encoding='utf-8') as graph_file_fp:
+      kg = {}
+      for line in graph_file_fp:
+          linesplit = line.split('\n')[0].split('\t')
+          head = int(linesplit[0])+1
+          relation = int(linesplit[2])+1
+          tail = int(linesplit[1])+1
+          # treat the KG as an undirected graph
+          # Restrict only to the selected entities and their relations
+          if head in entities_ids:
+            if head not in kg:
+                kg[head] = []
+            kg[head].append((tail, relation))
+          if tail in entities_ids:
+            if tail not in kg:
+                kg[tail] = []
+            kg[tail].append((head, relation))
 
-    if limit_kg_size is not None:
-        for line in graph_file_fp.readlines()[:limit_kg_size]:
-            linesplit = line.split('\n')[0].split('\t')
-            graph.append([int(linesplit[0])+1, int(linesplit[2])+1, int(linesplit[1])+1])
-    else:
-        for line in graph_file_fp:
-            linesplit = line.split('\n')[0].split('\t')
-            graph.append([int(linesplit[0])+1, int(linesplit[2])+1, int(linesplit[1])+1])
-    kg = {}
-    for triple in graph:
-        head = triple[0]
-        relation = triple[1]
-        tail = triple[2]
-        # treat the KG as an undirected graph
-        if head not in kg:
-            kg[head] = []
-        kg[head].append((tail, relation))
-        if tail not in kg:
-            kg[tail] = []
-        kg[tail].append((head, relation))
-
-    fp_entity2id = open(config['data']['entity_index'], 'r', encoding='utf-8')
-    entity_num = limit_kg_size
-    if limit_kg_size is None:
-        entity_num = int(fp_entity2id.readline().split('\n')[0])+1
-    entity_num = 1000
+    entity_num = len(entity2embedding_dict)
     entity_adj = []
     relation_adj = []
+    id2entity_dict = {v: k for k, v in entity2id_dict.items()}
     for i in range(entity_num+1):
         entity_adj.append([])
         relation_adj.append([])
@@ -437,29 +492,36 @@ def construct_adj_mind(config, limit_kg_size=None):#graph is triple
     for key in kg.keys():
         for index in range(config['model']['entity_neighbor_num']):
             i = random.randint(0,len(kg[key])-1)
-            entity_adj[int(key)].append(int(kg[key][i][0]))
-            relation_adj[int(key)].append(int(kg[key][i][1]))
+            # Convert the id to the new one
+            new_key = entity2embedding_dict[id2entity_dict[int(key)]]
+            entity_adj[new_key].append(int(kg[key][i][0]))
+            relation_adj[new_key].append(int(kg[key][i][1]))
 
     return entity_adj, relation_adj
 
-def construct_embedding_mind(config):
+# Load the emdedding of the entities in entity2id_dict, append them to entity_embedding and
+# update entity2embedding_dict
+def construct_embedding_mind(config, entity2id_dict, entity_embedding, entity2embedding_dict):
     print('constructing embedding ...')
-    entity_embedding = []
     relation_embedding = []
-    fp_entity_embedding = open(config['data']['entity_embedding'], 'r', encoding='utf-8')
-    fp_relation_embedding = open(config['data']['relation_embedding'], 'r', encoding='utf-8')
     zero_array = np.zeros(config['model']['entity_embedding_dim'])
-    entity_embedding.append(zero_array)
     relation_embedding.append(zero_array)
-    for line in fp_entity_embedding:
-        linesplit = line.strip().split('\t')
-        linesplit = [float(i) for i in linesplit]
-        entity_embedding.append(linesplit)
-    for line in fp_relation_embedding:
-        linesplit = line.strip().split('\t')
-        linesplit = [float(i) for i in linesplit]
-        relation_embedding.append(linesplit)
-    return torch.FloatTensor(entity_embedding), torch.FloatTensor(relation_embedding)
+    id2entity_dict = {v: k for k, v in entity2id_dict.items()}
+    with open(config['data']['entity_embedding'], 'r', encoding='utf-8') as fp_entity_embedding:
+        i = 1
+        for line in fp_entity_embedding:
+            if i in id2entity_dict:
+              linesplit = line.strip().split('\t')
+              linesplit = [float(i) for i in linesplit]
+              entity2embedding_dict[id2entity_dict[i]] = len(entity_embedding)
+              entity_embedding.append(linesplit)
+            i += 1
+    with open(config['data']['relation_embedding'], 'r', encoding='utf-8') as fp_relation_embedding:
+        for line in fp_relation_embedding:
+            linesplit = line.strip().split('\t')
+            linesplit = [float(i) for i in linesplit]
+            relation_embedding.append(linesplit)
+    return entity2embedding_dict, entity_embedding, relation_embedding
 
 def build_vert_data(config):
     random.seed(2020)
@@ -620,15 +682,44 @@ def build_item2item_data(config):
     item2item_test["label"] = label_dev
     return item2item_train, item2item_test
 
-def load_data_mind(config):
+def load_data_mind(config, embedding_folder=None):
+    # Build the dictionary for all the entities in the news
+    entity2id_dict = entity_to_id(config, entities_news(config))
 
-    entity_adj, relation_adj = construct_adj_mind(config, limit_kg_size=1000)
+    # Initialize the list containing all the embeddings
+    entity_embedding = []
+    # Ids start from 1, so append a list of zeros at index 0
+    entity_embedding.append(np.zeros(config['model']['entity_embedding_dim']))
+    # Initialize the dictionary mapping the entity name and the position of embedding in the list
+    entity2embedding_dict = {}
+    # Load only the embeddings of the entities in the news
+    entity2embedding_dict, entity_embedding, relation_embedding = construct_embedding_mind(config, entity2id_dict, entity_embedding, entity2embedding_dict)
 
-    news_feature, max_entity_freq, max_entity_pos, max_entity_type = build_news_features_mind(config, limit_kg_size=1000)
+    # For each entity in the news, get the neighbours entities in the wikidata graph and their relations
+    entity_adj, relation_adj = construct_adj_mind(config, entity2id_dict, entity2embedding_dict)
 
+    # Some of the entities in the neighborhood are not part of the entities in the news, so after having identiefied them,
+    # their embedding is added to the list and they are added to the dictionary of entity2embedding
+    entities_not_embedded = set([item for items in entity_adj for item in items]).difference(set(entity2id_dict.values()))
+    entity2id_dict_not_embedded = id_to_entity(config, entities_not_embedded)
+    entity2embedding_dict, entity_embedding, relation_embedding = construct_embedding_mind(config, entity2id_dict_not_embedded, entity_embedding, entity2embedding_dict)
+
+    # Add the new entities to the dictionary
+    entity2id_dict.update(entity2id_dict_not_embedded)
+    # Invert the dictionary
+    id2entity_dict = {v: k for k, v in entity2id_dict.items()}
+    # The ids in entity_adj are the original ones, they need to be updated to the new ids given by entity2embedding_dict
+    for i in range(1, len(entity_adj)):
+        for j in range(0, len(entity_adj[i])):
+            entity_adj[i][j] = entity2embedding_dict[id2entity_dict[entity_adj[i][j]]]
+    entity_embedding = torch.FloatTensor(entity_embedding)
+    relation_embedding = torch.FloatTensor(relation_embedding)
+
+    # Load the news
+    news_feature, max_entity_freq, max_entity_pos, max_entity_type = build_news_features_mind(config, entity2embedding_dict, embedding_folder)
+
+    # Load the user history
     user_history = build_user_history(config)
-
-    entity_embedding, relation_embedding = construct_embedding_mind(config)
 
     if config['trainer']['training_type'] == "multi-task":
         train_data, dev_data = get_user2item_data(config)
