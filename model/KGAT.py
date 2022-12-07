@@ -5,7 +5,7 @@ from base.base_model import BaseModel
 
 class KGAT(BaseModel):
 
-    def __init__(self, config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation):
+    def __init__(self, config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation, device):
         super(KGAT, self).__init__()
         self.config = config
         self.doc_feature_dict = doc_feature_dict
@@ -13,6 +13,7 @@ class KGAT(BaseModel):
         self.adj_relation = adj_relation
         self.entity_embedding = entity_embedding
         self.relation_embedding = relation_embedding
+        self.device = device
         self.attention_layer1 = nn.Linear(3*self.config['model']['entity_embedding_dim'],self.config['model']['layer_dim'])
         self.attention_layer2 = nn.Linear(self.config['model']['layer_dim'], 1)
         self.softmax = nn.Softmax(dim=-1)
@@ -58,7 +59,7 @@ class KGAT(BaseModel):
                         entity_embedding_batch[i][j].append([])
                         for entityid in neighbor_entities[i][j][k]:
                             entity_embedding_batch[i][j][k].append(self.entity_embedding[entityid])
-        return torch.FloatTensor(torch.stack(entity_embedding_batch)).cuda()
+        return torch.FloatTensor(torch.stack(entity_embedding_batch)).to(self.device)
 
     def get_relation_embedding(self, neighbor_relations):
         entity_embedding_batch = []
@@ -80,7 +81,7 @@ class KGAT(BaseModel):
                         entity_embedding_batch[i][j].append([])
                         for entityid in neighbor_relations[i][j][k]:
                             entity_embedding_batch[i][j][k].append(self.relation_embedding[entityid])
-        return torch.FloatTensor(torch.stack(entity_embedding_batch)).cuda()
+        return torch.FloatTensor(torch.stack(entity_embedding_batch)).to(self.device)
 
 
     def aggregate(self, entity_embedding, neighbor_embedding):
@@ -91,11 +92,11 @@ class KGAT(BaseModel):
     def forward(self, entity_ids):
         neighbor_entities, neighbor_relations = self.get_neighbors(entity_ids)
 
-        entity_embedding_lookup = nn.Embedding.from_pretrained(self.entity_embedding.cuda())
-        relation_embedding_lookup = nn.Embedding.from_pretrained(self.relation_embedding.cuda())
-        neighbor_entity_embedding = entity_embedding_lookup(torch.tensor(neighbor_entities).cuda())
-        neighbor_relation_embedding = relation_embedding_lookup(torch.tensor(neighbor_relations).cuda())
-        entity_embedding = entity_embedding_lookup(torch.tensor(entity_ids).cuda())
+        entity_embedding_lookup = nn.Embedding.from_pretrained(self.entity_embedding.to(self.device))
+        relation_embedding_lookup = nn.Embedding.from_pretrained(self.relation_embedding.to(self.device))
+        neighbor_entity_embedding = entity_embedding_lookup(torch.tensor(neighbor_entities).to(self.device))
+        neighbor_relation_embedding = relation_embedding_lookup(torch.tensor(neighbor_relations).to(self.device))
+        entity_embedding = entity_embedding_lookup(torch.tensor(entity_ids).to(self.device))
 
 
         if len(entity_embedding.shape) == 3:
