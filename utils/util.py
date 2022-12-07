@@ -712,8 +712,8 @@ def load_data_mind(config, embedding_folder=None):
     for i in range(1, len(entity_adj)):
         for j in range(0, len(entity_adj[i])):
             entity_adj[i][j] = entity2embedding_dict[id2entity_dict[entity_adj[i][j]]]
-    entity_embedding = torch.FloatTensor(entity_embedding)
-    relation_embedding = torch.FloatTensor(relation_embedding)
+    entity_embedding = torch.FloatTensor(np.array(entity_embedding))
+    relation_embedding = torch.FloatTensor(np.array(relation_embedding))
 
     # Load the news
     news_feature, max_entity_freq, max_entity_pos, max_entity_type = build_news_features_mind(config, entity2embedding_dict, embedding_folder)
