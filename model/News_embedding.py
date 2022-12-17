@@ -6,20 +6,24 @@ from model.KGAT import KGAT
 
 class News_embedding(nn.Module):
 
-    def __init__(self, config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation, entity_num, position_num, type_num, device):
+    def __init__(self, config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation,
+                 entity_num, position_num, type_num, device):
         super(News_embedding, self).__init__()
         self.config = config
         self.doc_feature_dict = doc_feature_dict
         self.adj_entity = adj_entity
         self.adj_relation = adj_relation
         self.device = device
-        self.kgat = KGAT(config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation, device)
+        self.kgat = KGAT(config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation,
+                         device)
 
         self.entity_num = entity_num
         self.position_num = position_num
         self.type_num = type_num
 
-        self.final_embedding1 = nn.Linear(self.config['model']['document_embedding_dim']+ self.config['model']['embedding_dim'], self.config['model']['layer_dim'])
+        self.final_embedding1 = nn.Linear(
+            self.config['model']['document_embedding_dim'] + self.config['model']['embedding_dim'],
+            self.config['model']['layer_dim'])
         self.final_embedding2 = nn.Linear(self.config['model']['layer_dim'],
                                           self.config['model']['embedding_dim'])
         self.relu = nn.ReLU(inplace=True)
@@ -43,15 +47,30 @@ class News_embedding(nn.Module):
         self.type_embeddings.weight = nn.Parameter(type_weight)
         self.entity_num_embeddings.weight = nn.Parameter(entity_num_weight)
 
-        self.attention_embedding_layer1 = nn.Linear(self.config['model']['document_embedding_dim']+ self.config['model']['entity_embedding_dim'],self.config['model']['layer_dim'])
-        self.attention_embedding_layer2 = nn.Linear(self.config['model']['layer_dim'],1)
+        self.attention_embedding_layer1 = nn.Linear(
+            self.config['model']['document_embedding_dim'] + self.config['model']['entity_embedding_dim'],
+            self.config['model']['layer_dim'])
+        self.attention_embedding_layer2 = nn.Linear(self.config['model']['layer_dim'], 1)
         self.softmax = nn.Softmax(dim=-2)
 
+        # Multi-Head attention initialization
+        self.mh = nn.MultiheadAttention(embed_dim=self.config['model']['document_embedding_dim'],
+                                        num_heads=self.config['model']['mh_number_of_heads']
+                                        , kdim=self.config['model']['entity_embedding_dim'], vdim=self.config['model']['entity_embedding_dim']
+                                        , batch_first=True)
+
+    def multihead_attention_layer(self, entity_embeddings, context_vecs):
+        # context_vecs is the Q, entity_embeddings is K and V
+        key = torch.sum(entity_embeddings, dim=-2)
+        value = torch.sum(entity_embeddings, dim=-2)
+        attn_output, attn_output_weights = self.mh(context_vecs, key, value)
+        return attn_output, attn_output_weights
 
     def attention_layer(self, entity_embeddings, context_vecs):
         if len(entity_embeddings.shape) == 4:
             context_vecs = torch.unsqueeze(context_vecs, -2)
-            context_vecs = context_vecs.expand(context_vecs.shape[0], context_vecs.shape[1], entity_embeddings.shape[2], context_vecs.shape[3])
+            context_vecs = context_vecs.expand(context_vecs.shape[0], context_vecs.shape[1], entity_embeddings.shape[2],
+                                               context_vecs.shape[3])
         else:
             context_vecs = torch.unsqueeze(context_vecs, -2)
             context_vecs = context_vecs.expand(context_vecs.shape[0], entity_embeddings.shape[1], context_vecs.shape[2])
@@ -59,7 +78,7 @@ class News_embedding(nn.Module):
         att_value1 = self.relu(self.attention_embedding_layer1(torch.cat([entity_embeddings, context_vecs], dim=-1)))
         att_value = self.relu(self.attention_embedding_layer2(att_value1))
         soft_att_value = self.softmax(att_value)
-        weighted_entity_embedding = soft_att_value*entity_embeddings
+        weighted_entity_embedding = soft_att_value * entity_embeddings
         weighted_entity_embedding_sum = torch.sum(weighted_entity_embedding, dim=-2)
         topk_weights = torch.topk(soft_att_value, 20, dim=-2)
         if len(soft_att_value.shape) == 3:
@@ -70,7 +89,6 @@ class News_embedding(nn.Module):
                                                  topk_weights[1].shape[1] * topk_weights[1].shape[2] *
                                                  topk_weights[1].shape[3])
         return weighted_entity_embedding_sum, soft_att_value
-
 
     def get_entities_ids(self, news_id):
         entities = []
@@ -132,14 +150,13 @@ class News_embedding(nn.Module):
         return entity_num_embedding
 
     def get_title_embedding(self, istitles):
-        #print(istitles)
+        # print(istitles)
         istitle_embedding = self.title_embeddings(torch.tensor(istitles).to(self.device))
         return istitle_embedding
 
     def get_type_embedding(self, type):
         type_embedding = self.type_embeddings(torch.tensor(type).to(self.device))
         return type_embedding
-
 
     def forward(self, news_id):
         entities = self.get_entities_ids(news_id)
@@ -152,12 +169,24 @@ class News_embedding(nn.Module):
         istitle_embedding = self.get_title_embedding(istitle)
         type_embedding = self.get_type_embedding(type)
         kgat_entity_embeddings = self.kgat(entities)  # batch(news num) * entity num
-        news_entity_embedding = kgat_entity_embeddings + entity_num_embedding + istitle_embedding + type_embedding #todo
+        news_entity_embedding = kgat_entity_embeddings + entity_num_embedding + istitle_embedding + type_embedding  # todo
 
-        aggregate_embedding, topk_index = self.attention_layer(news_entity_embedding, torch.FloatTensor(np.array(context_vecs)).to(self.device))
+        # Choose type of attention
+        if self.config['model']['use_mh_attention']:
+            attention_context, topk_index = self.multihead_attention_layer(news_entity_embedding,
+                                                                  torch.FloatTensor(np.array(context_vecs)).to(
+                                                                      self.device))
+            concat_embedding = torch.cat(
+                [attention_context, torch.sum(news_entity_embedding, dim=-2)],
+                len(attention_context.shape) - 1)
+        else:
+            aggregate_embedding, topk_index = self.attention_layer(news_entity_embedding,
+                                                                   torch.FloatTensor(np.array(context_vecs)).to(
+                                                                       self.device))
+            concat_embedding = torch.cat(
+                [aggregate_embedding, torch.FloatTensor(np.array(context_vecs)).to(self.device)],
+                len(aggregate_embedding.shape) - 1)
 
-        concat_embedding = torch.cat([aggregate_embedding, torch.FloatTensor(context_vecs).to(self.device)],
-                                    len(aggregate_embedding.shape) - 1)
         news_embeddings = self.tanh(self.final_embedding2(self.relu(self.final_embedding1(concat_embedding))))
 
         return news_embeddings, topk_index

@@ -25,6 +25,8 @@ model:
   entity_embedding_dim: 100
   layer_dim: 128
   user_his_num: 20
+  use_mh_attention: true
+  mh_number_of_heads: 12
 
 
 trainer:
