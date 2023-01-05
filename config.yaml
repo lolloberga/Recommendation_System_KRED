@@ -16,6 +16,7 @@ data:
   relation_embedding : "./data/kg/wikidata-graph/relation2vecd100.vec"
   entity_index : "./data/kg/wikidata-graph/entity2id.txt"
   relation_index : "./data/kg/wikidata-graph/realtion2id.txt"
+  use_category_as_embedding: true
 
 model:
   document_embedding_dim: 768
@@ -27,7 +28,6 @@ model:
   user_his_num: 20
   use_mh_attention: true
   mh_number_of_heads: 12
-
 
 trainer:
   training_type: "single_task" # single_task or multi-task
