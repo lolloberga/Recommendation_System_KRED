@@ -56,7 +56,8 @@ class News_embedding(nn.Module):
         # Multi-Head attention initialization
         self.mh = nn.MultiheadAttention(embed_dim=self.config['model']['document_embedding_dim'],
                                         num_heads=self.config['model']['mh_number_of_heads']
-                                        , kdim=self.config['model']['entity_embedding_dim'], vdim=self.config['model']['entity_embedding_dim']
+                                        , kdim=self.config['model']['entity_embedding_dim'],
+                                        vdim=self.config['model']['entity_embedding_dim']
                                         , batch_first=True)
 
     def multihead_attention_layer(self, entity_embeddings, context_vecs):
@@ -155,7 +156,12 @@ class News_embedding(nn.Module):
         return istitle_embedding
 
     def get_type_embedding(self, type):
-        type_embedding = self.type_embeddings(torch.tensor(type).to(self.device))
+        if 'use_category_as_embedding' in self.config['data'] and self.config['data']['use_category_as_embedding']:
+            t = torch.FloatTensor(np.array(type)).to(self.device)
+            type_embedding = t
+        else:
+            t = torch.tensor(type).to(self.device)
+            type_embedding = self.type_embeddings(t)
         return type_embedding
 
     def forward(self, news_id):
@@ -174,8 +180,8 @@ class News_embedding(nn.Module):
         # Choose type of attention
         if self.config['model']['use_mh_attention']:
             attention_context, topk_index = self.multihead_attention_layer(news_entity_embedding,
-                                                                  torch.FloatTensor(np.array(context_vecs)).to(
-                                                                      self.device))
+                                                                           torch.FloatTensor(np.array(context_vecs)).to(
+                                                                               self.device))
             concat_embedding = torch.cat(
                 [attention_context, torch.sum(news_entity_embedding, dim=-2)],
                 len(attention_context.shape) - 1)
