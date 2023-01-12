@@ -21,7 +21,7 @@ class NewsDataset(Dataset):
         return sample
 
 def multi_task_training(config, data):
-    user_history_dict, entity_embedding, relation_embedding, entity_adj, relation_adj, doc_feature_dict, entity_num, position_num, type_num, user2item_train, user2item_test, vert_train, vert_test, local_train, local_test, pop_train, pop_test, item2item_train, item2item_test = data
+    user_history_dict, entity_embedding, relation_embedding, entity_adj, relation_adj, doc_feature_dict, entity_num, position_num, type_num, entity_category_num, entity_sec_category_num, user2item_train, user2item_test, vert_train, vert_test, local_train, local_test, pop_train, pop_test, item2item_train, item2item_test = data
     train_data_u2i = NewsDataset(user2item_train)
     train_sampler_u2i = RandomSampler(train_data_u2i)
     train_dataloader_u2i = DataLoader(train_data_u2i, sampler=train_sampler_u2i, batch_size=config['data_loader']['batch_size'],
@@ -45,7 +45,7 @@ def multi_task_training(config, data):
     device, deviceids = prepare_device(config['n_gpu'])
 
     model = KREDModel(config, user_history_dict, doc_feature_dict, entity_embedding, relation_embedding, entity_adj,
-                      relation_adj, entity_num, position_num, type_num, device).to(device)
+                      relation_adj, entity_num, position_num, type_num, entity_category_num, entity_sec_category_num, device).to(device)
 
     pretrain_epoch = 0
     while (pretrain_epoch < 5):
@@ -120,7 +120,7 @@ def multi_task_training(config, data):
 
 
 def single_task_training(config, data):
-    user_history_dict, entity_embedding, relation_embedding, entity_adj, relation_adj, doc_feature_dict, entity_num, position_num, type_num, train_data, test_data = data
+    user_history_dict, entity_embedding, relation_embedding, entity_adj, relation_adj, doc_feature_dict, entity_num, position_num, type_num, entity_category_num, entity_sec_category_num, train_data, test_data = data
 
     if config['trainer']['task'] == "user2item":
         train_data_u2i = NewsDataset(train_data)
@@ -160,7 +160,7 @@ def single_task_training(config, data):
     device, deviceids = prepare_device(config['n_gpu'])
 
     model = KREDModel(config, user_history_dict, doc_feature_dict, entity_embedding, relation_embedding, entity_adj,
-                      relation_adj, entity_num, position_num, type_num, device).to(device)
+                      relation_adj, entity_num, position_num, type_num, entity_category_num, entity_sec_category_num, device).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=config['optimizer']['lr'], weight_decay=0)
 

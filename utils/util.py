@@ -407,7 +407,7 @@ def build_user_history(config):
 
 def build_news_features_mind(config, entity2embedding_dict, embedding_folder=None):
     news_features = {}
-
+    numbers_of_total_features = 4 # it's the default numb of total features (postion, freq, category, embeddings)
     news_feature_dict = {}
     fp_train_news = open(config['data']['train_news'], 'r', encoding='utf-8')
     for line in fp_train_news:
@@ -415,7 +415,7 @@ def build_news_features_mind(config, entity2embedding_dict, embedding_folder=Non
         if len(fields) > 8:
             continue
         newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = fields
-        news_feature_dict[newsid] = (title+" "+abstract, entity_info_title, entity_info_abstract, vert)
+        news_feature_dict[newsid] = (title+" "+abstract, entity_info_title, entity_info_abstract, vert, subvert)
     # entityid, entity_freq, entity_position, entity_type
     fp_dev_news = open(config['data']['valid_news'], 'r', encoding='utf-8')
     for line in fp_dev_news:
@@ -423,29 +423,22 @@ def build_news_features_mind(config, entity2embedding_dict, embedding_folder=Non
         if len(fields) > 8:
             continue
         newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = fields
-        news_feature_dict[newsid] = (title + " " + abstract, entity_info_title, entity_info_abstract, vert)
+        news_feature_dict[newsid] = (title + " " + abstract, entity_info_title, entity_info_abstract, vert, subvert)
 
-    #deal with doc feature
+    # deal with doc feature
     entity_type_dict = {}
     entity_type_index = 1
-    entity_type_embedding = None
-    # the entity type embeddings should be on the same dimension (it depends on the transformer params)
-    dimension_entity_type_embedding = config['model']['embedding_dim']
+    entity_category_dict = {}
+    entity_category_index = 1
+    entity_second_category_dict = {}
+    entity_second_category_index = 1
+
     # Load sentence embeddings from files if present
     if embedding_folder is not None:
         sentences_embedding = load_from_pickle(embedding_folder + "train_news_embeddings")
         sentences_embedding.extend(load_from_pickle(embedding_folder + "valid_news_embeddings"))
-        if 'use_category_as_embedding' in config['data'] and config['data']['use_category_as_embedding']:
-            entity_type_embedding = KeyedVectors.load(embedding_folder + "train_category_embeddings", mmap='r')#load_from_pickle(embedding_folder + "train_category_embeddings")
-            '''validation_entity_type_emb = load_from_pickle(embedding_folder + "valid_category_embeddings")
-            for key, value in validation_entity_type_emb.items():
-                entity_type_embedding.setdefault(key, value)'''
-            # the entity type embeddings should be on the same dimension (it depends on the transformer params)
-            #dimension_entity_type_embedding = len(entity_type_embedding[list(entity_type_embedding.keys())[0]])
     else:
         model = SentenceTransformer('distilbert-base-nli-stsb-mean-tokens')
-        #if 'use_category_as_embedding' in config['data'] and config['data']['use_category_as_embedding']:
-        #    word2vec_model = Word2Vec(vector_size=100, window=5, min_count=1, workers=4)
 
     for i, news in enumerate(news_feature_dict):
         if embedding_folder is not None:
@@ -455,76 +448,60 @@ def build_news_features_mind(config, entity2embedding_dict, embedding_folder=Non
         news_entity_feature_list = []
         title_entity_json = json.loads(news_feature_dict[news][1])
         abstract_entity_json = json.loads(news_feature_dict[news][2])
-        # TODO: ora utilizzo la categoria proveniente dal dataset; forse conviene usare la lettera all'interno dei JSON
-        # perchè ho notato che non sempre c'è correlazione tra la lettera nel json e la categoria nel dataset
-        category = news_feature_dict[news][3]
         news_entity_feature = {}
         for item in title_entity_json:
-            type_key = item['Type']
-            if 'use_category_as_embedding' in config['data'] and config['data']['use_category_as_embedding']:
-                type_key = category
-                if category not in entity_type_dict:
-                    if entity_type_embedding is not None:
-                        if type_key not in entity_type_embedding: #TODO: sarebbe da riallenare il modello
-                            type_key = item['Type']
-                        entity_type_dict[type_key] = entity_type_embedding[type_key]
-                    else:
-                        raise NotImplementedError('Word2Vec not implemented yet')
-            else:
-                if type_key not in entity_type_dict:
-                    entity_type_dict[type_key] = entity_type_index
-                    entity_type_index = entity_type_index + 1
-            news_entity_feature[item['WikidataId']] = (len(item['OccurrenceOffsets']), 1, entity_type_dict[type_key]) #entity_freq, entity_position, entity_type
+            if item['Type'] not in entity_type_dict:
+                entity_type_dict[item['Type']] = entity_type_index
+                entity_type_index += 1
+            news_entity_feature[item['WikidataId']] = (len(item['OccurrenceOffsets']), 1, entity_type_dict[item['Type']]) #entity_freq, entity_position, entity_type
         for item in abstract_entity_json:
             if item['WikidataId'] in news_entity_feature:
                 news_entity_feature[item['WikidataId']] = (news_entity_feature[item['WikidataId']][0] + len(item['OccurrenceOffsets']), 1, news_entity_feature[item['WikidataId']][2])
             else:
-                type_key = item['Type']
-                if 'use_category_as_embedding' in config['data'] and config['data']['use_category_as_embedding']:
-                    type_key = category
-                    if category not in entity_type_dict:
-                        if entity_type_embedding is not None:
-                            if type_key not in entity_type_embedding:  # TODO: sarebbe da riallenare il modello
-                                type_key = item['Type']
-                            entity_type_dict[type_key] = entity_type_embedding[type_key]
-                        else:
-                            raise NotImplementedError('Word2Vec not implemented yet')
-                else:
-                    if type_key not in entity_type_dict:
-                        entity_type_dict[type_key] = entity_type_index
-                        entity_type_index = entity_type_index + 1
-                news_entity_feature[item['WikidataId']] = (len(item['OccurrenceOffsets']), 2, entity_type_dict[
-                    type_key])  # entity_freq, entity_position, entity_type
+                if item['Type'] not in entity_type_dict:
+                    entity_type_dict[item['Type']] = entity_type_index
+                    entity_type_index += 1
+                news_entity_feature[item['WikidataId']] = (len(item['OccurrenceOffsets']), 2, entity_type_dict[item['Type']])  # entity_freq, entity_position, entity_type
+
         for entity in news_entity_feature:
             if entity in entity2embedding_dict:
-                news_entity_feature_list.append([entity2embedding_dict[entity], news_entity_feature[entity][0], news_entity_feature[entity][1], news_entity_feature[entity][2]])
-        if 'use_category_as_embedding' in config['data'] and config['data']['use_category_as_embedding']:
-            news_entity_feature_list.append([0, 0, 0, np.zeros(dimension_entity_type_embedding)]) # la categoria in ultima posizione deve essere una lista
-        else:
-            news_entity_feature_list.append([0, 0, 0, 0])
+                all_features = [entity2embedding_dict[entity], news_entity_feature[entity][0], news_entity_feature[entity][1], news_entity_feature[entity][2]]
+                if 'use_entity_category' in config['data'] and config['data']['use_entity_category']:
+                    entity_category = news_feature_dict[news][3]
+                    if entity_category not in entity_category_dict:
+                        entity_category_dict[entity_category] = entity_category_index
+                        entity_category_index += 1
+                    all_features.append(entity_category_dict[entity_category])
+                if 'use_second_entity_category' in config['data'] and config['data']['use_second_entity_category']:
+                    entity_category = news_feature_dict[news][4]
+                    if entity_category not in entity_second_category_dict:
+                        entity_second_category_dict[entity_category] = entity_second_category_index
+                        entity_second_category_index += 1
+                    all_features.append(entity_second_category_dict[entity_category])
+                news_entity_feature_list.append(all_features)
+
+        # it must be the same for all elements
+        numbers_of_total_features = len(news_entity_feature_list[0]) if len(news_entity_feature_list) > 0 else numbers_of_total_features
+        news_entity_feature_list.append([0 for i in range(numbers_of_total_features)])
         if len(news_entity_feature_list) > config['model']['news_entity_num']:
             news_entity_feature_list = news_entity_feature_list[:config['model']['news_entity_num']]
         else:
             for i in range(len(news_entity_feature_list), config['model']['news_entity_num']):
-                if 'use_category_as_embedding' in config['data'] and config['data']['use_category_as_embedding']:
-                    news_entity_feature_list.append([0, 0, 0, np.zeros(dimension_entity_type_embedding)])
-                else:
-                    news_entity_feature_list.append([0, 0, 0, 0])
-        news_feature_list_ins = [[],[],[],[],[]]
+                news_entity_feature_list.append([0 for i in range(numbers_of_total_features)])
+
+        news_feature_list_ins = [[] for i in range(numbers_of_total_features + 1)]
         for i in range(len(news_entity_feature_list)):
-            for j in range(4):
+            for j in range(numbers_of_total_features):
                 news_feature_list_ins[j].append(news_entity_feature_list[i][j])
-        news_feature_list_ins[4] = sentence_embedding
+        news_feature_list_ins[numbers_of_total_features] = sentence_embedding
         news_features[news] = news_feature_list_ins
-    news_features["N0"] = [[],[],[],[],[]]
+
+    news_features["N0"] = [[] for i in range(numbers_of_total_features + 1)]
     for i in range(config['model']['news_entity_num']):
-        for j in range(4):
-            if j == 3 and 'use_category_as_embedding' in config['data'] and config['data']['use_category_as_embedding']:
-                news_features["N0"][j].append(np.zeros(dimension_entity_type_embedding))
-            else:
-                news_features["N0"][j].append(0)
-    news_features["N0"][4] = np.zeros(config['model']['document_embedding_dim'])
-    return news_features, 100, 10, 100
+        for j in range(numbers_of_total_features):
+            news_features["N0"][j].append(0)
+    news_features["N0"][numbers_of_total_features] = np.zeros(config['model']['document_embedding_dim'])
+    return news_features, 100, 10, 100, entity_category_index, entity_second_category_index
 
 def construct_adj_mind(config, entity2id_dict, entity2embedding_dict):#graph is triple
     print('constructing adjacency matrix ...')
@@ -784,7 +761,8 @@ def load_data_mind(config, embedding_folder=None):
     relation_embedding = torch.FloatTensor(np.array(relation_embedding))
 
     # Load the news
-    news_feature, max_entity_freq, max_entity_pos, max_entity_type = build_news_features_mind(config, entity2embedding_dict, embedding_folder)
+    news_feature, max_entity_freq, max_entity_pos, max_entity_type, max_entity_category, max_entity_sec_category \
+        = build_news_features_mind(config, entity2embedding_dict, embedding_folder)
 
     # Load the user history
     user_history = build_user_history(config)
@@ -794,19 +772,19 @@ def load_data_mind(config, embedding_folder=None):
         vert_train, vert_test = build_vert_data(config)
         pop_train, pop_test = build_pop_data(config)
         item2item_train, item2item_test = build_item2item_data(config)
-        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, train_data, dev_data, vert_train, vert_test, pop_train, pop_test, item2item_train, item2item_test
+        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, max_entity_category, max_entity_sec_category, train_data, dev_data, vert_train, vert_test, pop_train, pop_test, item2item_train, item2item_test
     elif config['trainer']['task'] == "user2item":
         train_data, dev_data = get_user2item_data(config)
-        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, train_data, dev_data
+        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, max_entity_category, max_entity_sec_category, train_data, dev_data
     elif config['trainer']['task'] == "item2item":
         item2item_train, item2item_test = build_item2item_data(config)
-        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, item2item_train, item2item_test
+        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, max_entity_category, max_entity_sec_category, item2item_train, item2item_test
     elif config['trainer']['task'] == "vert_classify":
         vert_train, vert_test = build_vert_data(config)
-        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, vert_train, vert_test
+        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, max_entity_category, max_entity_sec_category, vert_train, vert_test
     elif config['trainer']['task'] == "pop_predict":
         pop_train, pop_test = build_pop_data(config)
-        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, pop_train, pop_test
+        return user_history, entity_embedding, relation_embedding, entity_adj, relation_adj, news_feature, max_entity_freq, max_entity_pos, max_entity_type, max_entity_category, max_entity_sec_category, pop_train, pop_test
     else:
         print("task error, please check config")
 

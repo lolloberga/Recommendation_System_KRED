@@ -5,7 +5,9 @@ from model.News_embedding import News_embedding
 
 class User_modeling(nn.Module):
 
-    def __init__(self, config, user_history_dict, news_embedding_dim, user_embedding_dim, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation, entity_num, position_num, type_num, device):
+    def __init__(self, config, user_history_dict, news_embedding_dim, user_embedding_dim, doc_feature_dict,
+                 entity_embedding, relation_embedding, adj_entity, adj_relation, entity_num, position_num,
+                 type_num, entity_category_num, entity_sec_category_num, device):
         super(User_modeling, self).__init__()
         self.config = config
         self.user_history_dict = user_history_dict
@@ -15,7 +17,8 @@ class User_modeling(nn.Module):
         self.adj_entity = adj_entity
         self.adj_relation = adj_relation
         self.device = device
-        self.news_embedding = News_embedding(config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation, entity_num, position_num, type_num, device)
+        self.news_embedding = News_embedding(config, doc_feature_dict, entity_embedding, relation_embedding, adj_entity, adj_relation, entity_num,
+                                             position_num, type_num, entity_category_num, entity_sec_category_num, device)
 
         self.user_attention_layer1 = nn.Linear(news_embedding_dim, self.config['model']['layer_dim'])
         self.user_attention_layer2 = nn.Linear(self.config['model']['layer_dim'], 1)
@@ -29,6 +32,12 @@ class User_modeling(nn.Module):
             user_history.append(self.user_history_dict[userid])
         return user_history
 
+
+    def multihead_attention_layer(self, news_embeddings):
+        # news_embeddings=(64, 20, 100)
+        # TODO: per farlo mi devo far passare l'embedding del documento come in News embeddings
+        return news_embeddings
+
     def user_attention_modeling(self, news_embeddings):
         user_attention = self.relu(self.user_attention_layer1(news_embeddings))
         user_attention = self.relu(self.user_attention_layer2(user_attention))
@@ -38,7 +47,6 @@ class User_modeling(nn.Module):
         return user_attention_embedding
 
     def forward(self, user_id):
-
         user_history = self.get_user_history(user_id)
         user_history_embedding, top_indexs = self.news_embedding(user_history)
         user_attention_modeling = self.user_attention_modeling(user_history_embedding)
