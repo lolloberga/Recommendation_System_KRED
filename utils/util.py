@@ -7,13 +7,10 @@ from pathlib import Path
 from itertools import repeat
 from collections import OrderedDict
 
-from gensim.models import KeyedVectors
-
 from sentence_transformers import SentenceTransformer
 import requests
 import math
 import zipfile
-#from logger.logger import *
 from tqdm import tqdm
 import pickle
 
@@ -28,6 +25,21 @@ def load_from_pickle(filename):
     with open(filename, "rb") as fp:
         data = pickle.load(fp)
     return data
+
+# Save the news embedded using SentenceTransformer
+def save_embedding_news(data_folder, save_folder):
+    print(f"Start saving the {data_folder} news embeddings")
+    news_feature_dict = {}
+    with open("./data/"+data_folder+"/news.tsv", 'r', encoding='utf-8') as fp:
+      for i, line in enumerate(fp):
+          newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
+          news_feature_dict[newsid] = title+" "+abstract
+    embeddings = []
+    model = SentenceTransformer('distilbert-base-nli-stsb-mean-tokens')
+    for news in news_feature_dict:
+        embeddings.append(model.encode(news_feature_dict[news]))
+    save_to_pickle(embeddings, save_folder + f"{data_folder}_news_embeddings")
+    print(f"Saved the {data_folder} news embeddings")
 
 # Returns all the entities in the news dataset
 def entities_news(config):
