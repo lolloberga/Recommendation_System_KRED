@@ -29,16 +29,13 @@ def load_from_pickle(filename):
 # Save the news embedded using SentenceTransformer
 def save_embedding_news(data_folder, save_folder):
     print(f"Start saving the {data_folder} news embeddings")
-    news_feature_dict = {}
-    with open("./data/"+data_folder+"/news.tsv", 'r', encoding='utf-8') as fp:
-      for i, line in enumerate(fp):
-          newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
-          news_feature_dict[newsid] = title+" "+abstract
     embeddings = []
     model = SentenceTransformer('distilbert-base-nli-stsb-mean-tokens')
-    for news in news_feature_dict:
-        embeddings.append(model.encode(news_feature_dict[news]))
-    save_to_pickle(embeddings, save_folder + f"{data_folder}_news_embeddings")
+    with open("./data/"+data_folder+"/news.tsv", 'r', encoding='utf-8') as fp:
+      for line in fp:
+        newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
+        embeddings.append(model.encode(title+" "+abstract))
+    save_to_pickle(embeddings, save_folder + f"{data_folder}_news_embeddings.pickle")
     print(f"Saved the {data_folder} news embeddings")
 
 # Returns all the entities in the news dataset
@@ -422,20 +419,31 @@ def build_news_features_mind(config, entity2embedding_dict, embedding_folder=Non
     numbers_of_total_features = 4 # it's the default numb of total features (postion, freq, category, embeddings)
     news_feature_dict = {}
     fp_train_news = open(config['data']['train_news'], 'r', encoding='utf-8')
-    for line in fp_train_news:
+    # Load sentence embeddings from file if present
+    if embedding_folder is not None:
+        train_sentences_embedding = load_from_pickle(embedding_folder + "train_news_embeddings.pickle")
+    for i, line in enumerate(fp_train_news):
         fields = line.strip().split('\t')
         if len(fields) > 8:
             continue
         newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = fields
-        news_feature_dict[newsid] = (title+" "+abstract, entity_info_title, entity_info_abstract, vert, subvert)
-    # entityid, entity_freq, entity_position, entity_type
+        if embedding_folder is not None:
+            news_feature_dict[newsid] = (train_sentences_embedding[i], entity_info_title, entity_info_abstract, vert, subvert)
+        else:
+            news_feature_dict[newsid] = (title+" "+abstract, entity_info_title, entity_info_abstract, vert, subvert)
     fp_dev_news = open(config['data']['valid_news'], 'r', encoding='utf-8')
-    for line in fp_dev_news:
+    # Load sentence embeddings from file if present
+    if embedding_folder is not None:
+        valid_sentences_embedding = load_from_pickle(embedding_folder + "valid_news_embeddings.pickle")
+    for i, line in enumerate(fp_dev_news):
         fields = line.strip().split('\t')
         if len(fields) > 8:
             continue
         newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = fields
-        news_feature_dict[newsid] = (title + " " + abstract, entity_info_title, entity_info_abstract, vert, subvert)
+        if embedding_folder is not None:
+            news_feature_dict[newsid] = (valid_sentences_embedding[i], entity_info_title, entity_info_abstract, vert, subvert)
+        else:
+            news_feature_dict[newsid] = (title+" "+abstract, entity_info_title, entity_info_abstract, vert, subvert)
 
     # deal with doc feature
     entity_type_dict = {}
@@ -446,15 +454,12 @@ def build_news_features_mind(config, entity2embedding_dict, embedding_folder=Non
     entity_second_category_index = 1
 
     # Load sentence embeddings from files if present
-    if embedding_folder is not None:
-        sentences_embedding = load_from_pickle(embedding_folder + "train_news_embeddings")
-        sentences_embedding.extend(load_from_pickle(embedding_folder + "valid_news_embeddings"))
-    else:
+    if embedding_folder is None:
         model = SentenceTransformer('distilbert-base-nli-stsb-mean-tokens')
 
     for i, news in enumerate(news_feature_dict):
         if embedding_folder is not None:
-            sentence_embedding = sentences_embedding[i]
+            sentence_embedding = news_feature_dict[news][0]
         else:
             sentence_embedding = model.encode(news_feature_dict[news][0])
         news_entity_feature_list = []
