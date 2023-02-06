@@ -34,7 +34,7 @@ def save_embedding_news(data_folder, save_folder):
     with open("./data/"+data_folder+"/news.tsv", 'r', encoding='utf-8') as fp:
       for line in fp:
         newsid, vert, subvert, title, abstract, url, entity_info_title, entity_info_abstract = line.strip().split('\t')
-        embeddings.append(model.encode(title+" "+abstract))
+        embeddings.append(model.encode(title+" "+abstract, show_progress_bar=False))
     save_to_pickle(embeddings, save_folder + f"{data_folder}_news_embeddings.pickle")
     print(f"Saved the {data_folder} news embeddings")
 

@@ -87,10 +87,9 @@ In turn, each entity should be characterized by:
 --------------------------------------------------------------
 
 ## Getting started
-Before running the code, you should check `config.yaml` and setup all the parameters correctly; 
-once done, you can perfom the training and testing phases in `main.py`.
+Before running the code, you should check `config.yaml` and setup all the parameters correctly.
 
-Alternatively, you can follow the instructions in `kred_example.ipynb` for a guided experience.
+You can perfom the training and testing phases using `kred_example.ipynb`. If you want to use Colab, download `kred_example.ipynb`, then upload it on Colab, change runtime to use GPU and follow the instructions in the notebook.
 
 --------------------------------------------------------------
 
