@@ -27,7 +27,7 @@ The dataset used is MIND dataset, created on a huge amount of Microsoft News int
 KRED is a knowledge enhanced framework which enhance a document embedding with knowledge information for multiple news recommendation tasks. 
 The framework mainly contains two part: representation enhancement part and multi-task training part.
 
-![](./Architecture_new.jpeg)
+![](./Architecture_new.PNG)
 
 Two extensions to this model have been implemented:
 1. in the context embedding layer, we enriched the entity emdedding with the news category, consisting of a first general category and a second more specific category
@@ -45,9 +45,8 @@ The backbone resources of this project are listed in this table, including paper
 ## Setup
 
 ### Requirements
-1. The project has been tested on Linux (Ubuntu 18.04), MacOS and Windows (10)
-2. Python 3.8+ version is needed
-3. Multiple NVIDIA GPU are mandatory to run the model in feasible time but, if the dataset is undersampled, the number of GPUs needed can be reduced; we could run the model with Colab's GPU (Tesla T4 16GB), after sampling properly MIND
+1. The code has been tested using the Google Colab environment, running under Python 3.8.10
+2. Multiple NVIDIA GPU are mandatory to run the model in feasible time but, if the you use smaller version of the dataset, the number of GPUs needed can be reduced; we could run the model with Colab's GPU (Tesla T4 16GB) using MINDsmall
 
 ### Enviroment
 Once the repo is cloned, some python libraries are required to properly setup your (virtual) enviroment.
@@ -64,11 +63,11 @@ or via conda:
 ```
 
 ### Dataset and Features
-The dataset explored by KRED is MIcrosoft News Dataset (MIND), a large-scale dataset collected by anonymized behavior logs of Microsoft News website. 
+The dataset explored by KRED is Microsoft News Dataset (MIND), a large-scale dataset collected by anonymized behavior logs of the Microsoft News website. 
 Constructed from the user click logs, MIND contains 1 million users and more than 160k English news articles; 
-in addition, Microsoft has released a smaller version of the original dataset, by randomly sampling 50k users and their behavior logs.
+in addition, Microsoft has released a smaller version of the original dataset, by randomly sampling 50k users and their behavior logs (MINDsmall).
 
-After preprocessing the dataset with BERT, each Document Vector should be structured in:
+Each news consists of:
 - News ID
 - Category and Sub-Category
 - Title and a brief Abstract
@@ -76,7 +75,7 @@ After preprocessing the dataset with BERT, each Document Vector should be struct
 - List of entities in the Title
 - List of entities in the Abstract
 
-In turn, each entity should be characterized by:
+Each entity is characterized by:
 - Label, which the entity is associated to
 - Type of entity, such as person, object ecc.
 - WikidataId of the label
