@@ -27,7 +27,7 @@ The dataset used is MIND dataset, created on a huge amount of Microsoft News int
 KRED is a knowledge enhanced framework which enhance a document embedding with knowledge information for multiple news recommendation tasks. 
 The framework mainly contains two part: representation enhancement part and multi-task training part.
 
-![](./framework.PNG)
+![](./Architecture_new.jpeg)
 
 Two extensions to this model have been implemented:
 1. in the context embedding layer, we enriched the entity emdedding with the news category, consisting of a first general category and a second more specific category
