@@ -46,7 +46,7 @@ The backbone resources of this project are listed in this table, including paper
 
 ### Requirements
 1. The code has been tested using the Google Colab environment, running under Python 3.8.10
-2. Multiple NVIDIA GPU are mandatory to run the model in feasible time but, if the you use smaller version of the dataset, the number of GPUs needed can be reduced; we could run the model with Colab's GPU (Tesla T4 16GB) using MINDsmall
+2. Multiple NVIDIA GPUs are mandatory to run the model in feasible time but, if you use smaller version of the dataset (MINDsmall), the number of GPUs needed can be reduced; we could run the model with Colab's GPU (Tesla T4 16GB) using MINDsmall
 
 ### Enviroment
 Once the repo is cloned, some python libraries are required to properly setup your (virtual) enviroment.
