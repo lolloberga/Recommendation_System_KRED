@@ -151,7 +151,7 @@ class News_embedding(nn.Module):
                                                                            torch.FloatTensor(np.array(context_vecs)).to(
                                                                                self.device))
             concat_embedding = torch.cat(
-                [attention_context, torch.sum(news_entity_embedding, dim=-2)],
+                [attention_context, torch.FloatTensor(np.array(context_vecs)).to(self.device)],
                 len(attention_context.shape) - 1)
         else:
             aggregate_embedding, topk_index = self.attention_layer(news_entity_embedding,
